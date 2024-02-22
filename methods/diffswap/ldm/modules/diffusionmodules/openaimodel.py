@@ -18,7 +18,7 @@ from ldm.modules.diffusionmodules.util import (
     timestep_embedding,
 )
 from ldm.modules.attention import SpatialTransformer
-from IPython import embed
+# from IPython import embed
 
 
 # dummy replace

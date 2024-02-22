@@ -20,8 +20,10 @@ def compute_area(item):
 keys = ['left_eye', 'right_eye', 'nose', 'mouth_left', 'mouth_right']
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = "face alignment")
-    parser.add_argument("-dest_root", "--dest_root", help = "specify your destination dir", default = "data/portrait/align112x112", type = str)
-    parser.add_argument("-crop_size", "--crop_size", help = "specify size of aligned faces, align and crop with padding", default = 112, type = int)
+    parser.add_argument("-dest_root", "--dest_root", help = "specify your destination dir",
+                        default = "data/portrait/align112x112", type = str)
+    parser.add_argument("-crop_size", "--crop_size", help = "specify size of aligned faces, align and crop with padding",
+                        default = 112, type = int)
     args = parser.parse_args()
 
     crop_size = args.crop_size
