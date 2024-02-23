@@ -8,9 +8,9 @@ from torch.utils.data import DataLoader
 import torchvision
 from torchvision import transforms
 
-from model.generator import ADDGenerator
-from model.encoder import MultilevelAttributesEncoder
-from model.iresnet import iresnet100
+from .model.generator import ADDGenerator
+from .model.encoder import MultilevelAttributesEncoder
+from .model.iresnet import iresnet100
 
 import random
 import numpy as np
