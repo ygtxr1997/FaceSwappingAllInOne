@@ -2,6 +2,8 @@ import os
 import numpy as np
 import torch
 import torch.nn.functional as F
+from sklearn.metrics.pairwise import pairwise_distances
+from sklearn.metrics import mean_squared_error
 
 from . import net
 
@@ -38,3 +40,25 @@ class CosFaceImageInfer(object):
             x = x.to(self.device)
         embeddings: torch.Tensor = self.model(x)
         return embeddings
+
+    def calc_id_retrieval(self,
+                          emb_result: torch.Tensor,
+                          emb_source: torch.Tensor,
+                          idx_source_gt: np.ndarray = None,
+                          ):
+        if idx_source_gt is None:
+            idx_source_gt = np.arange(emb_source.shape[0])
+
+        dists = pairwise_distances(emb_result, emb_source, metric='cosine')  # (dataset_len,dataset_len)
+        idx_source_pred = dists.argmin(axis=1)  # (dataset_len,)
+        cos_sims = (1 - dists)
+
+        diff = np.zeros_like(idx_source_pred)
+        ones = np.ones_like(idx_source_pred)
+        diff[idx_source_pred != idx_source_gt] = ones[idx_source_pred != idx_source_gt]
+        acc = 1. - diff.sum() / diff.shape[0]
+        cos_sim_mean = cos_sims[idx_source_gt, idx_source_gt].mean()
+        print('id retrieval acc = %.2f %%, cosine_sim = %.4f' % (
+            acc * 100., cos_sim_mean
+        ))
+        return acc, cos_sim_mean
