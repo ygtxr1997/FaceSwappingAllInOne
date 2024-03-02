@@ -3,14 +3,9 @@ import random
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torchvision import transforms
+
 from .op import FusedLeakyReLU, fused_leaky_relu, upfirdn2d
-import numpy as np
-# from mmcv.cnn import constant_init, kaiming_init
-# from mmcv.utils.parrots_wrapper import _BatchNorm
-from torch.nn.init import constant_ as constant_init
-from torch.nn.init import kaiming_normal_ as kaiming_init
-from torch.nn import BatchNorm2d as _BatchNorm
+
 
 class PixelNorm(nn.Module):
     def __init__(self):
@@ -522,9 +517,6 @@ class Generator(nn.Module):
 
             latent = torch.cat([latent, latent2], 1)
 
-        fea_outs = []
-        #img_skips = []
-
         out = self.input(latent)
         out = self.conv1(out, latent[:, 0], noise=noise[0])
 
@@ -539,243 +531,15 @@ class Generator(nn.Module):
             skip = to_rgb(out, latent[:, i + 2], skip)
 
             i += 2
-            fea_outs.append(out)
-            #img_skips.append(skip)
 
         image = skip
 
-        # return image, fea_outs#, img_skips
-        return fea_outs#, img_skips
-
-
-
-
-
-def default_init_weights(module, scale=1):
-    """Initialize network weights.
-
-    Args:
-        modules (nn.Module): Modules to be initialized.
-        scale (float): Scale initialized weights, especially for residual
-            blocks.
-    """
-    for m in module.modules():
-        if isinstance(m, nn.Conv2d):
-            kaiming_init(m, a=0, mode='fan_in', bias=0)
-            m.weight.data *= scale
-        elif isinstance(m, nn.Linear):
-            kaiming_init(m, a=0, mode='fan_in', bias=0)
-            m.weight.data *= scale
-        elif isinstance(m, _BatchNorm):
-            constant_init(m.weight, val=1, bias=0)
-
-
-
-class PixelShufflePack(nn.Module):
-    """ Pixel Shuffle upsample layer.
-
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-        scale_factor (int): Upsample ratio.
-        upsample_kernel (int): Kernel size of Conv layer to expand channels.
-
-    Returns:
-        Upsampled feature map.
-    """
-
-    def __init__(self, in_channels, out_channels, scale_factor,
-                 upsample_kernel):
-        super().__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.scale_factor = scale_factor
-        self.upsample_kernel = upsample_kernel
-        self.upsample_conv = nn.Conv2d(
-            self.in_channels,
-            self.out_channels * scale_factor * scale_factor,
-            self.upsample_kernel,
-            padding=(self.upsample_kernel - 1) // 2)
-        self.init_weights()
-
-    def init_weights(self):
-        """Initialize weights for PixelShufflePack.
-        """
-        default_init_weights(self, 1)
-
-    def forward(self, x):
-        """Forward function for PixelShufflePack.
-
-        Args:
-            x (Tensor): Input tensor with shape (n, c, h, w).
-
-        Returns:
-            Tensor: Forward results.
-        """
-        x = self.upsample_conv(x)
-        #print (x.shape)
-        x = F.pixel_shuffle(x, self.scale_factor)
-        #print ('22222',x.shape)
-
-        return x
-
-
-
-
-class TransposeBlur(nn.Module):
-
-
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-
-        self.upsample_conv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=0, output_padding=0,bias=True)
-
-
-        blur_kernel = [1, 3, 3, 1]
-        kernel_size = 3
-        factor = 2
-        p = (len(blur_kernel) - factor) - (kernel_size - 1)
-        pad0 = (p + 1) // 2 + factor - 1
-        pad1 = p // 2 + 1
-        self.blur = Blur(blur_kernel, pad=(pad0, pad1), upsample_factor=factor)
-
-
-    def forward(self, x):
-
-        x = self.upsample_conv(x)
-        x = self.blur(x)
-
-        return x
-
-
-
-
-
-class Decoder(nn.Module):
-    def __init__(
-        self,
-        in_size,
-        out_size,
-        channel_multiplier = 2
-    ):
-        super().__init__()
-        channels = {
-            4: 512,
-            8: 512,
-            16: 512,
-            32: 512,
-            64: 256 * channel_multiplier,
-            128: 128 * channel_multiplier,
-            256: 64 * channel_multiplier,
-            512: 32 * channel_multiplier,
-            1024: 16 * channel_multiplier,
-        }
-
-        self.log_size = int(math.log(out_size, 2))
-        self.decoder_res = [
-            2**i
-            for i in range(int(np.log2(in_size)), int(np.log2(out_size) + 1))
-        ]
-
-        self.decoder = nn.ModuleList()
-
-        for res in self.decoder_res:
-
-            if res == in_size:
-                in_channels = channels[res]
-            else:
-                in_channels = 2 * channels[res]
-
-            if res < out_size:
-                out_channels = channels[res * 2]
-                self.decoder.append(TransposeBlur(in_channels, out_channels))
-
-
-            else:
-                
-                self.decoder.append(
-                    nn.Sequential(
-                        nn.Conv2d(in_channels, 16, 3, 1, 1),
-                        FusedLeakyReLU(16),
-                        nn.Conv2d(16, 3, 3, 1, 1)))
-
-
-    def forward(self,source_fea,target_fea,mask):
-
-        # for x in self.decoder:
-        #     print (x)
-
-
-        for i in range(self.log_size-2):
-            mask = transforms.Resize(source_fea[i].size(2))(mask)
-            blended = source_fea[i] * mask + target_fea[i] * (1 - mask)
-
-            if i == 0:
-                inputs = blended
-            else:
-                inputs = torch.cat([blended, outputs], dim=1)
-            #print (i,inputs.shape,self.decoder[i])
-            outputs = self.decoder[i](inputs)
-
-        return outputs
-
-
-
-
-
-
-
-
-
-
-
-class GPENEncoder(nn.Module):
-    def __init__(
-        self,
-        size,
-        channel_multiplier=1,
-        blur_kernel=[1, 3, 3, 1],
-        lr_mlp=0.01,
-    ):
-        super().__init__()
-        channels = {
-            4: 512,
-            8: 512,
-            16: 512,
-            32: 512,
-            64: 256 * channel_multiplier,
-            128: 128 * channel_multiplier,
-            256: 64 * channel_multiplier,
-            512: 32 * channel_multiplier,
-            1024: 16 * channel_multiplier,
-        }
-
-        self.log_size = int(math.log(size, 2))
-        self.encoder = nn.ModuleList()
-        conv = [ConvLayer(3, channels[size], 1)]
-        self.encoder.append(nn.Sequential(*conv))
-        in_channel = channels[size]
-        for i in range(self.log_size, 2, -1):
-            out_channel = channels[2 ** (i - 1)]
-            conv = [ConvLayer(in_channel, out_channel, 3, downsample=True)] 
-            self.encoder.append(nn.Sequential(*conv))
-            in_channel = out_channel
-
-    def forward(self,
-        inputs,
-    ):
-        immediate_feas = []
-        for i in range(self.log_size-1):
-            inputs = self.encoder[i](inputs)
-            immediate_feas.append(inputs)
-
-        return immediate_feas[::-1]
-
-
-
-
-
-
+        if return_latents:
+            return image, latent
+        elif return_features:
+            return image, out
+        else:
+            return image, None
 
 
 class ConvLayer(nn.Sequential):
@@ -853,15 +617,15 @@ class Discriminator(nn.Module):
         super().__init__()
 
         channels = {
-            4: 512 ,
-            8: 512 ,
-            16: 512 ,
-            32: 512 ,
-            64: 256  * channel_multiplier,
-            128: 128  * channel_multiplier,
-            256: 64  * channel_multiplier,
-            512: 32  * channel_multiplier,
-            1024: 16  * channel_multiplier,
+            4: 512,
+            8: 512,
+            16: 512,
+            32: 512,
+            64: 256 * channel_multiplier,
+            128: 128 * channel_multiplier,
+            256: 64 * channel_multiplier,
+            512: 32 * channel_multiplier,
+            1024: 16 * channel_multiplier,
         }
 
         convs = [ConvLayer(3, channels[size], 1)]
@@ -879,7 +643,7 @@ class Discriminator(nn.Module):
 
         self.convs = nn.Sequential(*convs)
 
-        self.stddev_group = 1
+        self.stddev_group = 4
         self.stddev_feat = 1
 
         self.final_conv = ConvLayer(in_channel + 1, channels[4], 3)

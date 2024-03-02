@@ -8,10 +8,15 @@ import cv2
 from PIL import Image
 import numpy as np
 
-from hires.models.encoders.psp_encoders import GradualLandmarkEncoder
-from hires.models.stylegan2.model import GPENEncoder
-from hires.models.stylegan2.model import Generator, Decoder
-from hires.models.nets import F_mapping
+from .models.encoders.psp_encoders import GradualLandmarkEncoder
+from .models.stylegan2.model import GPENEncoder
+from .models.stylegan2.model import Generator, Decoder
+from .models.nets import F_mapping
+
+from .psp.models.psp import pSp
+from .h3r.torchalign import FacialLandmarkDetector
+from .bisenet import BiSeNet
+
 
 make_abs_path = lambda fn: os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), fn))
 
@@ -77,7 +82,7 @@ class HiResImageInfer(torch.nn.Module):
         generator = torch.nn.parallel.DataParallel(generator)
         bald_model = torch.nn.parallel.DataParallel(bald_model)
 
-        hires_ckpt = make_abs_path('./weights/CELEBA-HQ-1024.pt')
+        hires_ckpt = make_abs_path(make_abs_path('../weights/HiRes/weights/CELEBA-HQ-1024.pt'))
         hires_weights = torch.load(hires_ckpt,  map_location=torch.device('cpu'))
 
         encoder_lmk.load_state_dict(hires_weights["encoder_lmk"])
@@ -93,31 +98,30 @@ class HiResImageInfer(torch.nn.Module):
         self.bald_model = bald_model
 
     def load_psp(self):
-        from psp.models.psp import pSp
         psp_opts = argparse.ArgumentParser
         psp_opts.encoder_type = 'GradualStyleEncoder'
-        psp_opts.checkpoint_path = make_abs_path('./weights/psp_ffhq_encode.pt')
+        psp_opts.checkpoint_path = make_abs_path('../weights/HiRes/weights/psp_ffhq_encode.pt')
         psp_opts.start_from_latent_avg = True
         psp_opts.stylegan_size = 1024
         psp_opts.input_nc = 3
         psp_opts.device = 0
+        psp_opts.output_size = 1024
+        psp_opts.learn_in_w = True
         psp_model = pSp(psp_opts)
         psp_model.eval()
         self.psp_model = psp_model.cuda(0)
 
     def load_h3r(self):
-        from h3r.torchalign import FacialLandmarkDetector
-        h3r_folder = make_abs_path('/gavin/code/FaceSwapping/modules/third_party/h3r/models/lapa/hrnet18_256x256_p2')
+        h3r_folder = make_abs_path('../weights/HiRes/h3r/models/lapa/hrnet18_256x256_p2')
         h3r_model = FacialLandmarkDetector(root=h3r_folder)
         h3r_model.eval()
         self.h3r_model = h3r_model.cuda(0)
 
     def load_bisenet(self):
-        from bisenet.bisenet import BiSeNet
         bisenet_model = BiSeNet(n_classes=19)
         bisenet_model.load_state_dict(
             torch.load(
-                "/gavin/datasets/hanbang/79999_iter.pth",
+                make_abs_path("../weights/bisenet/79999_iter.pth"),
                 map_location="cpu",
             )
         )
@@ -238,15 +242,14 @@ class HiResImageInfer(torch.nn.Module):
         return blend_img
 
     @torch.no_grad()
-    def image_infer(self, source_pil, target_pil):
+    def infer_image(self, source, target, **kwargs):
         """
-
-        :param source_pil: PIL.Image, in [0,255]
-        :param target_pil: PIL.Image, in [0,255]
+        :param source: PIL.Image, in [0,255]
+        :param target: PIL.Image, in [0,255]
         :return:
         """
-        # source_pil = Image.open('infer_images/00030.jpg')
-        # target_pil = Image.open('infer_images/00020.jpg')
+        source_pil = source
+        target_pil = target
 
         source_tensor = self.trans(source_pil).cuda(0)
         target_tensor = self.trans(target_pil).cuda(0)
@@ -275,7 +278,7 @@ class HiResImageInfer(torch.nn.Module):
         seg = seg.permute(0, 2, 3, 1)[0].cpu().numpy()
         t_mask = self._encode_segmentation_rgb(seg)
         t_mask = cv2.resize(t_mask, (1024, 1024))
-        t_mask = t_mask.transpose((2, 0, 1)).astype(np.float) / 255.0
+        t_mask = t_mask.transpose((2, 0, 1)).astype(np.float32) / 255.0
         t_mask = t_mask[0] + t_mask[1]
         t_mask = cv2.dilate(t_mask, np.ones((50, 50)), borderType=cv2.BORDER_CONSTANT, borderValue=0)
         t_mask = torch.FloatTensor(t_mask).cuda(0).unsqueeze(0)  # (1,1024,1024)
@@ -291,6 +294,11 @@ class HiResImageInfer(torch.nn.Module):
                                  )  # in [-1,1]
         # result = (result.clamp(-1, 1) + 1) / 2
         # self.save_tensor_to_img(result, './infer_images/result.jpg', scale=256)
+
+        result = result.clamp(-1, 1)
+
+        result = (result[0].permute(1, 2, 0).cpu().numpy() + 1.) * 127.5
+        result = Image.fromarray(result.astype(np.uint8))
         return result
 
 
