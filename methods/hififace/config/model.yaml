@@ -1,0 +1,64 @@
+generator:
+  target: "hififace.model.hififace.Generator"
+  params:
+    identity_extractor_config:
+      f_3d_checkpoint_path: "Deep3D/checkpoints/face_recon/epoch_20.pth"
+      f_id_checkpoint_path: "arcface/ms1mv3_arcface_r100_fp16/backbone.pth"
+
+  optimizer:
+    target: "torch.optim.AdamW"
+    params:
+      lr: 1e-4
+      betas: 
+      - 0
+      - 0.999
+
+discriminator:
+  target: "hififace.model.multiscalediscriminator.MultiscaleDiscriminator"
+  params:
+    input_nc: 3
+
+  optimizer:
+    target: "torch.optim.AdamW"
+    params:
+      lr: 1e-4
+      betas: 
+      - 0
+      - 0.999
+
+g_loss:
+  target: "hififace.model.loss.GLoss"
+  params:
+    f_3d_checkpoint_path: "Deep3D/checkpoints/face_recon/epoch_20.pth"
+    f_id_checkpoint_path: "arcface/ms1mv3_arcface_r100_fp16/backbone.pth"
+    sid_config:
+      {}
+    realism_config:
+      {}
+
+d_loss:
+  target: "hififace.model.loss.DLoss"
+  params: {}
+
+dataset:
+  train:
+    target: "hififace.dataset.HifiFaceParsingTrainDataset"
+    params:
+      img_root: "/"
+      parsing_root: "/"
+      same_rate: 50
+    dataloader:
+      batch_size: 16
+      num_workers: 32
+      drop_last: True
+      shuffle: True
+
+  validation:
+    target: "hififace.dataset.HifiFaceParsingValDataset"
+    params:
+      img_root: "/"
+      parsing_root: "/"
+    dataloader:
+      batch_size: 1
+      shuffle: False
+      num_workers: 8
