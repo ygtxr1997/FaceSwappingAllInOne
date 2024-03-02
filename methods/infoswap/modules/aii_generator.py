@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Sequential
 
-from infoswap.utils import ConvexUpsample
+from ..utils import ConvexUpsample
 
 
 def weight_init(m):

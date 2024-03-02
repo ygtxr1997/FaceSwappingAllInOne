@@ -16,7 +16,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
 # sys.path.append('/data1/gege.gao/projects/InfoSwap-master/preprocess')
-from infoswap.preprocess.mtcnn import MTCNN
+from .preprocess.mtcnn import MTCNN
 
 mtcnn = MTCNN()
 
