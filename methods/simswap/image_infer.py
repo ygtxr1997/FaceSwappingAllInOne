@@ -8,7 +8,7 @@ import cv2
 from PIL import Image
 import numpy as np
 
-from simswap.models.models import create_model
+from .models.models import create_model
 
 make_abs_path = lambda fn: os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), fn))
 
@@ -17,7 +17,7 @@ class SimSwapConfig(object):
     def __init__(self):
         self.name = 'people'
         self.gpu_ids = '0'
-        self.checkpoints_dir = make_abs_path('./checkpoints')
+        self.checkpoints_dir = make_abs_path('../weights/SimSwap/checkpoints')
         self.model = 'pix2pixHD'
         self.norm = 'batch'
         self.use_dropout = False
@@ -61,7 +61,7 @@ class SimSwapConfig(object):
         self.export_onnx = ''
         self.engine = ''
         self.onnx = ''
-        self.Arc_path = make_abs_path('arcface_model/arcface_fixed.tar')
+        self.Arc_path = make_abs_path('../weights/SimSwap/arcface_model/arcface_fixed.tar')
         self.id_thres=0.03,
         self.no_simswaplogo=False
         self.use_mask=False
@@ -82,7 +82,16 @@ class SimSwapOfficialImageInfer(object):
         print('[SimSwap Official] model loaded.')
 
     @torch.no_grad()
-    def image_infer(self, source_tensor, target_tensor):
+    def infer_image(self, source: Image, target: Image, **kwargs):
+        def pil_to_tensor(x: Image.Image):
+            x = x.resize((256, 256))
+            x = np.array(x).astype(np.float32) / 127.5 - 1.
+            x = torch.tensor(x).permute(2, 0, 1).unsqueeze(0).cuda()
+            return x
+
+        source_tensor = pil_to_tensor(source)
+        target_tensor = pil_to_tensor(target)
+
         source_tensor = source_tensor / 2 + 0.5
         target_tensor = target_tensor / 2 + 0.5
 
@@ -91,8 +100,12 @@ class SimSwapOfficialImageInfer(object):
         source_id = F.normalize(source_id, dim=1)
 
         result = self.model(source_tensor, target_tensor, source_id, source_id, True)  # in [0,1]
+        result = result * 2 - 1  # to [-1,1]
+        result = result.clamp(-1, 1)
 
-        return result * 2 - 1  # to [-1,1]
+        result = (result[0].permute(1, 2, 0).cpu().numpy() + 1.) * 127.5
+        result = Image.fromarray(result.astype(np.uint8))
+        return result
 
     @staticmethod
     def save_tensor_to_img(tensor: torch.Tensor, path: str, scale=256):
@@ -106,25 +119,25 @@ class SimSwapOfficialImageInfer(object):
 
     def save_arcface(self):
         arcface = self.model.netArc
-        torch.save({'model': arcface}, './arcface_model/arcface_fixed.tar')
+        torch.save({'model': arcface}, make_abs_path('../weights/SimSwap/arcface_model/arcface_fixed.tar'))
 
 
 if __name__ == '__main__':
-    source_pil = Image.open('./infer_images/source.jpg')
-    target_pil = Image.open('./infer_images/target.jpg')
-
-    trans = transforms.Compose([
-        transforms.Resize(256),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-    ])
-
-    source_tensor = trans(source_pil).unsqueeze(0).cuda()
-    target_tensor = trans(target_pil).unsqueeze(0).cuda()
+    # source_pil = Image.open('./infer_images/source.jpg')
+    # target_pil = Image.open('./infer_images/target.jpg')
+    #
+    # trans = transforms.Compose([
+    #     transforms.Resize(256),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+    # ])
+    #
+    # source_tensor = trans(source_pil).unsqueeze(0).cuda()
+    # target_tensor = trans(target_pil).unsqueeze(0).cuda()
 
     simswap_image_infer = SimSwapOfficialImageInfer()
     # result = simswap_image_infer.image_infer(source_tensor, target_tensor)
     # result = (result.clamp(-1, 1) + 1) / 2
     # simswap_image_infer.save_tensor_to_img(result, path='./infer_images/result.jpg')
-    # simswap_image_infer.save_arcface()
+    simswap_image_infer.save_arcface()
 

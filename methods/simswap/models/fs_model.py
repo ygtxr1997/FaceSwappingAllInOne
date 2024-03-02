@@ -4,8 +4,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 from torch.autograd import Variable
-from simswap.models.base_model import BaseModel
-from simswap.models import networks
+from .base_model import BaseModel
+from . import networks
+
 
 class SpecificNorm(nn.Module):
     def __init__(self, epsilon=1e-8):
@@ -51,9 +52,9 @@ class fsModel(BaseModel):
         device = torch.device("cuda:0")
 
         if opt.crop_size == 224:
-            from simswap.models.fs_networks import Generator_Adain_Upsample, Discriminator
+            from .fs_networks import Generator_Adain_Upsample, Discriminator
         elif opt.crop_size == 512:
-            from simswap.models.fs_networks_512 import Generator_Adain_Upsample, Discriminator
+            from .fs_networks_512 import Generator_Adain_Upsample, Discriminator
 
         # Generator network
         self.netG = Generator_Adain_Upsample(input_nc=3, output_nc=3, latent_size=512, n_blocks=9, deep=False)

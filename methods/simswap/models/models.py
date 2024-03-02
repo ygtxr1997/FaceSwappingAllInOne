@@ -3,13 +3,14 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.nn import Parameter
-from simswap.models.config import device, num_classes
+
+from .config import device, num_classes
+from .fs_model import fsModel
 
 
 def create_model(opt):
     if opt.model == 'pix2pixHD':
         #from .pix2pixHD_model import Pix2PixHDModel, InferenceModel
-        from simswap.models.fs_model import fsModel
         model = fsModel()
     else:
         from .ui_model import UIModel
