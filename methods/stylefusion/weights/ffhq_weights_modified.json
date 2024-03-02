@@ -1,0 +1,7 @@
+{
+	"all": "StyleFusion/ffhq/all.pt",
+	"bg_hair_clothes": "StyleFusion/ffhq/bg_hair_clothes.pt",
+	"bg_clothes": "StyleFusion/ffhq/bg_clothes.pt",
+	"face": "StyleFusion/ffhq/face.pt",
+	"skin_mouth": "StyleFusion/ffhq/skin_mouth.pt"
+}
