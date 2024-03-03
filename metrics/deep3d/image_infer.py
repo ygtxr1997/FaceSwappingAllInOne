@@ -70,9 +70,27 @@ class Deep3DImageInfer(object):
     @torch.no_grad()
     def infer_image(self, img_pil: Image):
         """ """
+
+        from functools import wraps
+        import sys
+        import io
+        def capture_output(func):
+            """Wrapper to capture print output."""
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                old_stdout = sys.stdout
+                new_stdout = io.StringIO()
+                sys.stdout = new_stdout
+                try:
+                    return func(*args, **kwargs)
+                finally:
+                    sys.stdout = old_stdout
+            return wrapper
+
         ''' get 5 landmarks '''
         W, H = img_pil.size
-        mtcnn_results = self.mtcnn.detect_faces(np.array(img_pil))
+        detect_faces = capture_output(self.mtcnn.detect_faces)
+        mtcnn_results = detect_faces(np.array(img_pil))
         if len(mtcnn_results) == 0:
             print('[Warning] No face here, using default ffhq aligned coordinates.')
             landmarks = np.array([
@@ -110,6 +128,17 @@ class Deep3DImageInfer(object):
         #     self.facemodel.compute_for_render(output_coeff)
         # self.pred_mask, _, self.pred_face = self.renderer(
         #     self.pred_vertex, self.facemodel.face_buf, feat=self.pred_color)
+
+        pred_coeffs_dict = self.facemodel.split_coeff(output_coeff)
+        return pred_coeffs_dict
+
+    @torch.no_grad()
+    def infer_tensor(self, x: torch.Tensor):
+        im = (x + 1.) / 2.  # [-1,1] to [0,1]
+        im = im.cuda()
+
+        ''' forward '''
+        output_coeff = self.net_recon(im)
 
         pred_coeffs_dict = self.facemodel.split_coeff(output_coeff)
         return pred_coeffs_dict

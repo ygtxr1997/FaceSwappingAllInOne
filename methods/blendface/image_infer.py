@@ -6,9 +6,10 @@ import numpy as np
 import torch
 import torchvision
 from torchvision import transforms
+import torch.nn.functional as F
 
-from swapping import BlendSwap
-from align_tools import FaceAlignImageInfer
+from .swapping import BlendSwap
+from .align_tools import FaceAlignImageInfer
 
 
 make_abs_path = lambda fn: os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), fn))
@@ -26,13 +27,33 @@ class BlendFaceImageInfer(object):
         self.device = device
         self.model = model
 
-    def infer_image(self, source: Image.Image, target: Image.Image):
+        self.source_size = (112, 112)
+        in_size = 512
+        self.trans_matrix = torch.tensor(
+            [[[1.07695457, -0.03625215, -1.56352194 / 512],
+              [0.03625215, 1.07695457, -5.32134629 / 512]]],
+            requires_grad=False, ).float().to(self.device)
+
+    @torch.no_grad()
+    def infer_image(self, source: Image.Image, target: Image.Image, **kwargs):
         target_img = transforms.ToTensor()(target).unsqueeze(0).to(self.device)
         source_img = transforms.ToTensor()(source).unsqueeze(0).to(self.device)
 
+        x = source_img
+        b, c, h, w = x.shape
+        if (h, w) != self.source_size:  # if x is ffhq aligned
+            x = F.interpolate(x, size=512, mode="bilinear", align_corners=True)  # first resize to 512
+            m = self.trans_matrix.repeat(b, 1, 1)  # to (B,2,3)
+            grid = F.affine_grid(m, size=x.shape, align_corners=True)  # 得到 grid 用于 grid sample
+            x = F.grid_sample(x, grid, align_corners=True, mode="bilinear", padding_mode="zeros")  # warp affine
+            x = F.interpolate(x, size=112, mode="bilinear", align_corners=True)  # resize to 112x112
+        else:  # x is arcface aligned
+            x = x
+
+        y = F.interpolate(target_img, size=256, mode="bilinear", align_corners=True)  # resize to 112x112
+
         with torch.no_grad():
-            output = self.model(target_img, source_img)
-        print(output.shape)
+            output = self.model(y, x)
         swapped = Image.fromarray(
             (output.permute(0, 2, 3, 1)[0].cpu().data.numpy() * 255).astype(np.uint8)
         )

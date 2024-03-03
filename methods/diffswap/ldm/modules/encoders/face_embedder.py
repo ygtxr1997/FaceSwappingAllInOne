@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,16 +12,19 @@ from ldm.modules.attention import CrossAttention
 from ldm.models.diffusion.ddpm import disabled_train
 
 
+make_abs_path = lambda fn: os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), fn))
+
+
 # including l_eye r_eye nose mouse
 class FaceEmbedder(nn.Module):
     def __init__(self, lmk_dim=128, keys=None, pair=False, comb_mode='concat', merge_eyes=False, \
             attention=False, face_model='r50', face_dataset='glint360k', affine_crop=False, use_blur=False):
         super().__init__()
         self.pair = pair
-        cfg = get_config(f'src/arcface_torch/configs/{face_dataset}_{face_model}.py')
+        cfg = get_config(make_abs_path(f'../../../src/arcface_torch/configs/{face_dataset}_{face_model}.py'))
         self.face_model = get_model(cfg.network, dropout=0.0, 
                 fp16=cfg.fp16, num_features=cfg.embedding_size)
-        ckpt_path = f'checkpoints/{face_dataset}_{face_model}.pth'
+        ckpt_path = make_abs_path(f'../../../checkpoints/{face_dataset}_{face_model}.pth')
         a, b = self.face_model.load_state_dict(torch.load(ckpt_path, map_location='cpu'), strict=False)
         print('loading face model:', a, b)
         print('build model:', face_dataset, face_model, ckpt_path)

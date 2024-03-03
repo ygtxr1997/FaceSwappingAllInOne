@@ -6,9 +6,10 @@ import os
 import kornia
 import warnings
 
-from modules.layers.faceshifter.layers import AEI_Net
-from modules.layers.faceshifter.hear_layers import Hear_Net
-from modules.third_party.arcface import iresnet100, MouthNet
+from ..layers.faceshifter.layers import AEI_Net
+from ..layers.faceshifter.hear_layers import Hear_Net
+from ..arcface import iresnet100, MouthNet
+
 
 make_abs_path = lambda fn: os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), fn))
 

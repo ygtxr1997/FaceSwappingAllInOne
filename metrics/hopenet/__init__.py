@@ -54,7 +54,7 @@ class HopeNetImageInfer(object):
         roll_mse, roll_l2, roll_dim = self._calc_mse_l2(roll_r, roll_t)
         mse = (yaw_mse + pitch_mse + roll_mse) / 3
         l2 = (yaw_l2 + pitch_l2 + roll_l2) / 3
-        print('hopenet average MSE=%.3f, L2=%.3f, dim=%d' % (
+        print('[hopenet] average MSE=%.3f, L2=%.3f, dim=%d' % (
             mse,
             l2,
             yaw_dim,

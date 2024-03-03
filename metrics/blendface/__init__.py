@@ -5,13 +5,13 @@ import torch.nn.functional as F
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.metrics import mean_squared_error
 
-from . import net
+from .iresnet import iresnet100
 
 
 make_abs_path = lambda fn: os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), fn))
 
 
-class CosFaceImageInfer(object):
+class BlendFaceMetricImageInfer(object):
     def __init__(self, device: str = "cuda:0"):
         self.device = torch.device(device)
         self.size = (112, 112)
@@ -21,8 +21,8 @@ class CosFaceImageInfer(object):
               [0.03625215, 1.07695457, -5.32134629 / 512]]],
             requires_grad=False,).float()
 
-        self.model = net.sphere().to(self.device)
-        weights = make_abs_path("../weights/cosface/net_sphere20_data_vggface2_acc_9955.pth")
+        self.model = iresnet100().to(self.device)
+        weights = make_abs_path("../weights/BlendFace/blendface.pt")
         self.model.load_state_dict(torch.load(weights, map_location="cpu"))
         self.model.eval()
 
@@ -60,7 +60,7 @@ class CosFaceImageInfer(object):
         diff[idx_source_pred != idx_source_gt] = ones[idx_source_pred != idx_source_gt]
         acc = 1. - diff.sum() / diff.shape[0]
         cos_sim_mean = cos_sims[idx_source_gt, idx_source_gt].mean()
-        print('id retrieval acc = %.2f %%, cosine_sim = %.4f' % (
+        print('[BlendFace] id retrieval acc = %.2f %%, cosine_sim = %.4f' % (
             acc * 100., cos_sim_mean
         ))
         return acc, cos_sim_mean

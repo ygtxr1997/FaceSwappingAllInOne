@@ -15,9 +15,7 @@ import random
 from omegaconf import OmegaConf
 from PIL import Image, ImageChops
 from tqdm import tqdm
-from utils.portrait import Portrait
 from einops import rearrange, repeat
-from utils.blending.blending_mask import gaussian_pyramid, laplacian_pyramid, laplacian_pyr_join, laplacian_collapse
 from skimage import io
 from imutils import face_utils
 from torchvision import transforms
@@ -30,10 +28,13 @@ import torch.nn.functional as F
 
 from mtcnn import MTCNN
 
-from data_preprocessing.align.align_trans import get_reference_facial_points, warp_and_crop_face
-from ldm.util import instantiate_from_config
-from ldm.data.portrait import Portrait
-from ldm.models.diffusion.ddim import DDIMSampler
+from .data_preprocessing.align.align_trans import get_reference_facial_points, warp_and_crop_face
+from .utils.portrait import Portrait
+from .utils.blending.blending_mask import gaussian_pyramid, laplacian_pyramid, laplacian_pyr_join, laplacian_collapse
+from . import ldm
+from .ldm.util import instantiate_from_config
+from .ldm.data.portrait import Portrait
+from .ldm.models.diffusion.ddim import DDIMSampler
 
 
 make_abs_path = lambda fn: os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), fn))
@@ -94,7 +95,8 @@ class DiffSwapImageInfer(object):
         imgray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         faces = self.get_detect(imgray, 2)
         if len(faces) == 0:
-            raise ValueError("No face found!")
+            print("No face found!")
+            return image, np.random.randn(68, 2).astype(np.float32)
         if len(faces) > 1:
             print("[Warning] More than one face found!")
             face = dlib.rectangle(faces[0].left(), faces[0].top(), faces[0].right(), faces[0].bottom())
@@ -300,7 +302,8 @@ class DiffSwapImageInfer(object):
         imgray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         faces = self.get_detect(imgray, 2)
         if len(faces) == 0:
-            raise ValueError("No face found!")
+            print("No face found!")
+            return np.random.randn(68, 2).astype(np.float32)
         if len(faces) > 1:
             print("[Warning] More than one face found!")
             face = dlib.rectangle(faces[0].left(), faces[0].top(), faces[0].right(), faces[0].bottom())
@@ -362,7 +365,8 @@ class DiffSwapImageInfer(object):
 
         value = sorted(mtcnn_256, key=compute_area)
         if len(value) == 0:
-            raise ValueError("[] face_align_portrait: No face found!")
+            print("[] face_align_portrait: No face found!")
+            return aligned_pil.resize((112, 112)), np.random.randn(2, 3).astype(np.float32)
         value = value[0]
         facial5points = [value['keypoints'][key] for key in keys]
         tfm = warp_and_crop_face(None, facial5points, reference, crop_size=(crop_size, crop_size), return_tfm=True)
@@ -619,7 +623,9 @@ class DiffSwapImageInfer(object):
         pasted_pil = gen_img
         return pasted_pil
 
-    def infer_image(self, source: Image.Image, target: Image.Image) -> Image.Image:
+    @torch.no_grad()
+    def infer_image(self, source: Image.Image, target: Image.Image,
+                    need_paste: bool = True, **kwargs) -> Image.Image:
         # 1. jpg to png
         s_bgr = self.pil_to_bgr(source)
         t_bgr = self.pil_to_bgr(target)
@@ -655,6 +661,7 @@ class DiffSwapImageInfer(object):
             batch=batch,
             ckpt=self.ckpt,
             ddim_sampler=self.ddim_sampler,
+            ddim_steps=50,
         )
         swapped_pil.save("tmp_swapped_pil.jpg")
         mask_pil.save("tmp_mask_pil.jpg")
@@ -665,11 +672,13 @@ class DiffSwapImageInfer(object):
             swapped_pil, t_pil_aligned, mask_pil
         )
         repaired_pil.save("tmp_repaired_pil.jpg")
-        pasted_pil = self.paste(
-            repaired_pil, target, t_affine
-        )
 
-        return pasted_pil
+        if need_paste:
+            repaired_pil = self.paste(
+                repaired_pil, target, t_affine
+            )
+
+        return repaired_pil
 
 
 if __name__ == '__main__':
